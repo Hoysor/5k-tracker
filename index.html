@@ -1,4 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>5K Block Tracker</title>
+<meta name="description" content="Six-week 5K program with tick-off sessions and a training dashboard.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="theme-color" content="#f3f5f8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f131b" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="5K Tracker">
+<style>
+html { color-scheme: light; -webkit-text-size-adjust: 100%; }
+:root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; }
+</style>
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -48,6 +69,7 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 14px; line-height: 1.45; }
 .wrap { max-width: 1320px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 40px; display: grid; gap: 20px; }
 h1 { font-family: var(--font-display); font-weight: 700; font-size: 2.1rem; letter-spacing: .01em; text-transform: uppercase; margin: 0; line-height: 1; text-wrap: balance; }
@@ -149,7 +171,7 @@ td.test .title { font-family: var(--font-display); font-size: 1.25rem; letter-sp
 .type-track i { display: block; height: 100%; background: var(--c); border-radius: 0 4px 4px 0; }
 .type-num { font: 500 .8rem var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; min-width: 92px; text-align: right; }
 .log-wrap { overflow-x: auto; }
-.log input { width: 6.2em; min-height: 38px; padding: 6px 8px; font-size: .92rem; }
+.log input { width: 6.2em; min-height: 38px; padding: 6px 8px; font-size: 1rem; }
 .log input.hr { width: 4.6em; }
 .log input[aria-invalid="true"] { border-color: var(--bad); }
 .log td.muted { color: var(--muted); }
@@ -163,6 +185,8 @@ td.test .title { font-family: var(--font-display); font-size: 1.25rem; letter-sp
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 
+</head>
+<body>
 <div class="wrap">
   <header class="top">
     <div class="top-left">
@@ -762,3 +786,11 @@ td.test .title { font-family: var(--font-display); font-size: 1.25rem; letter-sp
   }, function () { goLocal(); });
 })();
 </script>
+
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });
+}
+</script>
+</body>
+</html>
