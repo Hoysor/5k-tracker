@@ -1,0 +1,764 @@
+<title>5K Block Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: header with start date + progress, a two-tab switch (Program grid with Mon–Sun columns / Dashboard), dashboard = KPI row, then weekly + by-type completion, then pace logs with charts, test result, missed sessions. */
+:root {
+  --bg: #f3f5f8;
+  --surface: #ffffff;
+  --ink: #141a26;
+  --muted: #5d6779;
+  --line: #d9dee7;
+  --grid: #e8ebf1;
+  --accent: #2346d8;
+  --accent-soft: #e4e9fd;
+  --easy: #2a8f57;
+  --vo2: #2346d8;
+  --lt2: #c27a12;
+  --speed: #7a4fc4;
+  --long: #008aa6;
+  --rest: #a3abb9;
+  --done-bg: #eef1f5;
+  --today: #fff6dc;
+  --good: #1b7a44;
+  --good-bg: #e2f3e8;
+  --warn: #9a5b00;
+  --warn-bg: #fbefd9;
+  --bad: #b3261e;
+  --bad-bg: #fbe4e2;
+  --font-display: "Barlow Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "IBM Plex Sans", -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f131b; --surface: #171c27; --ink: #e8ecf3; --muted: #98a2b5; --line: #2a3242; --grid: #222a38;
+    --accent: #6a84f2; --accent-soft: #222c4d; --easy: #3fa36c; --vo2: #6a84f2; --lt2: #bd7e1c;
+    --speed: #a86ad8; --long: #13a2b3; --rest: #5f687a; --done-bg: #131822; --today: #2c2817;
+    --good: #5cc98a; --good-bg: #16301f; --warn: #e5a443; --warn-bg: #33270f; --bad: #f07a6e; --bad-bg: #3a1a17;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f131b; --surface: #171c27; --ink: #e8ecf3; --muted: #98a2b5; --line: #2a3242; --grid: #222a38;
+  --accent: #6a84f2; --accent-soft: #222c4d; --easy: #3fa36c; --vo2: #6a84f2; --lt2: #bd7e1c;
+  --speed: #a86ad8; --long: #13a2b3; --rest: #5f687a; --done-bg: #131822; --today: #2c2817;
+  --good: #5cc98a; --good-bg: #16301f; --warn: #e5a443; --warn-bg: #33270f; --bad: #f07a6e; --bad-bg: #3a1a17;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 14px; line-height: 1.45; }
+.wrap { max-width: 1320px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 40px; display: grid; gap: 20px; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: 2.1rem; letter-spacing: .01em; text-transform: uppercase; margin: 0; line-height: 1; text-wrap: balance; }
+h2 { font-family: var(--font-display); font-weight: 600; font-size: 1.35rem; text-transform: uppercase; letter-spacing: .03em; margin: 0; line-height: 1.1; }
+.top { display: flex; flex-wrap: wrap; gap: 16px 28px; align-items: flex-end; justify-content: space-between; }
+.top-left { display: grid; gap: 6px; min-width: 0; }
+.sub { color: var(--muted); margin: 0; }
+.controls { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: flex-end; }
+.field { display: grid; gap: 4px; }
+.lbl { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+input[type="date"], .log input { font: 500 1rem var(--font-mono); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; min-height: 42px; }
+input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fact { display: grid; gap: 4px; }
+.fact b { font: 500 1rem var(--font-mono); font-variant-numeric: tabular-nums; padding-block: 9px; }
+.progress { display: grid; gap: 6px; min-width: 200px; flex: 1 1 220px; max-width: 320px; }
+.bar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
+.bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s ease; }
+.prog-row { display: flex; justify-content: space-between; gap: 8px; font-variant-numeric: tabular-nums; }
+.status { font-size: .78rem; color: var(--muted); }
+
+.tabs { display: inline-flex; gap: 4px; padding: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; justify-self: start; }
+.tabs button { font: 600 1.05rem var(--font-display); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); background: transparent; border: 0; border-radius: 7px; padding: 8px 18px; cursor: pointer; min-height: 40px; }
+.tabs button[aria-selected="true"] { background: var(--ink); color: var(--surface); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .8rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend span::before { content: ""; width: 10px; height: 10px; border-radius: 2px; background: var(--c); }
+.legend .dash::before { height: 0; width: 16px; border-top: 2px dashed var(--c); background: none; border-radius: 0; }
+
+.scroller { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); -webkit-overflow-scrolling: touch; }
+.prog-table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 1180px; table-layout: fixed; }
+col.wk { width: 74px; }
+.prog-table th, .prog-table td { border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); vertical-align: top; text-align: left; }
+.prog-table tr:last-child td, .prog-table tr:last-child th[scope="row"] { border-bottom: 0; }
+.prog-table th:last-child, .prog-table td:last-child { border-right: 0; }
+.prog-table thead th { font-family: var(--font-display); font-weight: 600; font-size: 1rem; letter-spacing: .06em; text-transform: uppercase; padding: 10px 12px; color: var(--muted); background: var(--surface); }
+.prog-table th[scope="row"] { position: sticky; left: 0; z-index: 1; background: var(--surface); padding: 12px 10px; }
+.prog-table thead th:first-child { position: sticky; left: 0; z-index: 2; }
+.wk-n { font-family: var(--font-display); font-weight: 700; font-size: 1.6rem; line-height: 1; }
+.wk-tag { display: block; font-size: .68rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-top: 4px; font-weight: 600; }
+.prog-table td { padding: 0; }
+.cell { display: grid; grid-template-rows: auto auto 1fr; gap: 4px; padding: 10px 12px 12px; height: 100%; min-height: 128px; border-top: 3px solid var(--c, var(--rest)); cursor: pointer; }
+.cell.static { cursor: default; }
+.cell-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.date { font: 500 .76rem var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.title { font-weight: 600; font-size: .9rem; line-height: 1.25; }
+.desc { font-size: .8rem; color: var(--muted); line-height: 1.4; }
+.cell input[type="checkbox"] { appearance: none; -webkit-appearance: none; width: 22px; height: 22px; margin: 0; border: 2px solid var(--line); border-radius: 5px; background: var(--surface); display: grid; place-items: center; cursor: pointer; flex: none; transition: background .15s, border-color .15s; }
+.cell input[type="checkbox"]::after { content: ""; width: 6px; height: 11px; border: solid var(--surface); border-width: 0 2.5px 2.5px 0; transform: rotate(45deg) translate(-1px, -1px); opacity: 0; }
+.cell input[type="checkbox"]:checked { background: var(--c, var(--accent)); border-color: var(--c, var(--accent)); }
+.cell input[type="checkbox"]:checked::after { opacity: 1; }
+.cell input[type="checkbox"]:disabled { cursor: default; opacity: .5; }
+td.is-done { background: var(--done-bg); }
+td.is-done .title, td.is-done .desc { opacity: .55; }
+td.is-done .title { text-decoration: line-through; text-decoration-thickness: 1.5px; }
+td.is-today { background: var(--today); }
+td.is-today .date { color: var(--ink); font-weight: 600; }
+td.is-today .date::after { content: " · today"; }
+td.rest .title { color: var(--muted); font-weight: 500; }
+td.test .cell { background: var(--accent-soft); }
+td.test .title { font-family: var(--font-display); font-size: 1.25rem; letter-spacing: .04em; text-transform: uppercase; color: var(--accent); }
+
+.ref { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 20px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+.panel-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 12px; }
+.panel-note { font-size: .8rem; color: var(--muted); margin: 0; }
+.simple { width: 100%; border-collapse: collapse; }
+.simple th, .simple td { text-align: left; border-bottom: 1px solid var(--line); padding: 7px 8px 7px 0; font-size: .85rem; vertical-align: middle; }
+.simple thead th { font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding-top: 0; }
+.simple tr:last-child td { border-bottom: 0; }
+.ref .simple td:first-child { font-weight: 600; white-space: nowrap; }
+.ref ul, .panel ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: .85rem; max-width: 68ch; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* dashboard */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); gap: 12px; }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.kpi-val { font-family: var(--font-display); font-weight: 700; font-size: 2.4rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.kpi-val small { font-size: 1.1rem; color: var(--muted); font-weight: 600; margin-left: 4px; }
+.kpi-sub { font-size: .8rem; color: var(--muted); }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: .74rem; font-weight: 600; padding: 3px 9px; border-radius: 999px; justify-self: start; }
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.pill.good { color: var(--good); background: var(--good-bg); }
+.pill.warn { color: var(--warn); background: var(--warn-bg); }
+.pill.bad { color: var(--bad); background: var(--bad-bg); }
+.pill.neutral { color: var(--muted); background: var(--done-bg); }
+.dash-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 20px; }
+.chart { position: relative; min-width: 0; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart text { font-family: var(--font-mono); font-size: 11px; fill: var(--muted); }
+.chart .val { fill: var(--ink); font-weight: 500; }
+.tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--surface); font-size: .78rem; padding: 6px 9px; border-radius: 6px; white-space: nowrap; transform: translate(-50%, calc(-100% - 10px)); z-index: 5; font-variant-numeric: tabular-nums; }
+.empty { font-size: .85rem; color: var(--muted); padding: 18px; border: 1px dashed var(--line); border-radius: 8px; text-align: center; }
+.types { display: grid; gap: 10px; }
+.type-row { display: grid; grid-template-columns: 92px 1fr auto; gap: 10px; align-items: center; font-size: .85rem; }
+.type-name { display: flex; align-items: center; gap: 7px; font-weight: 500; }
+.type-name::before { content: ""; width: 10px; height: 10px; border-radius: 2px; background: var(--c); flex: none; }
+.type-track { height: 12px; background: var(--grid); border-radius: 0 4px 4px 0; overflow: hidden; }
+.type-track i { display: block; height: 100%; background: var(--c); border-radius: 0 4px 4px 0; }
+.type-num { font: 500 .8rem var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; min-width: 92px; text-align: right; }
+.log-wrap { overflow-x: auto; }
+.log input { width: 6.2em; min-height: 38px; padding: 6px 8px; font-size: .92rem; }
+.log input.hr { width: 4.6em; }
+.log input[aria-invalid="true"] { border-color: var(--bad); }
+.log td.muted { color: var(--muted); }
+.flag { color: var(--bad); font-size: .75rem; font-weight: 600; margin-left: 6px; }
+.headline { display: flex; flex-wrap: wrap; gap: 8px 24px; }
+.headline div { display: grid; gap: 2px; }
+.headline b { font: 700 1.7rem var(--font-display); font-variant-numeric: tabular-nums; line-height: 1.05; }
+.test-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 24px; }
+.missed li { font-size: .85rem; }
+.missed .mono { color: var(--muted); margin-right: 8px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="top-left">
+      <h1>5K Block Tracker</h1>
+      <p class="sub">5 build weeks, then a taper week ending in a 5K test on Saturday.</p>
+    </div>
+    <div class="controls">
+      <label class="field" for="start">
+        <span class="lbl">Start date</span>
+        <input type="date" id="start" value="2026-10-12">
+      </label>
+      <div class="fact"><span class="lbl">Week 1 Monday</span><b id="wk1">—</b></div>
+      <div class="fact"><span class="lbl">5K test</span><b id="testDate">—</b></div>
+      <div class="progress">
+        <div class="prog-row"><span class="lbl">Sessions done</span><span id="progTxt" class="mono">0 / 0</span></div>
+        <div class="bar"><i id="progBar"></i></div>
+        <span class="status" id="status">Loading saved progress…</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="tabs" role="tablist" aria-label="View">
+    <button type="button" role="tab" id="tab-program" aria-controls="view-program" aria-selected="true">Program</button>
+    <button type="button" role="tab" id="tab-dashboard" aria-controls="view-dashboard" aria-selected="false">Dashboard</button>
+  </div>
+
+  <!-- PROGRAM -->
+  <section id="view-program" role="tabpanel" aria-labelledby="tab-program" style="display:grid;gap:20px">
+    <div class="legend" aria-hidden="true">
+      <span style="--c: var(--easy)">Easy</span>
+      <span style="--c: var(--vo2)">VO2max / race pace</span>
+      <span style="--c: var(--lt2)">LT2 threshold</span>
+      <span style="--c: var(--speed)">Hill sprints</span>
+      <span style="--c: var(--long)">Long run</span>
+      <span style="--c: var(--rest)">Rest</span>
+    </div>
+    <div class="scroller" id="scroller">
+      <table class="prog-table" aria-label="Six-week 5K program, Monday to Sunday">
+        <colgroup><col class="wk"><col><col><col><col><col><col><col></colgroup>
+        <thead><tr><th scope="col">Week</th><th scope="col">Mon</th><th scope="col">Tue</th><th scope="col">Wed</th><th scope="col">Thu</th><th scope="col">Fri</th><th scope="col">Sat</th><th scope="col">Sun</th></tr></thead>
+        <tbody id="body"></tbody>
+      </table>
+    </div>
+    <div class="ref">
+      <div class="panel">
+        <h2>Paces</h2>
+        <table class="simple">
+          <thead><tr><th>Intensity</th><th>Target</th></tr></thead>
+          <tbody>
+            <tr><td>Easy</td><td>HR 130–137, conversational</td></tr>
+            <tr><td>LT2</td><td>HR 158–165, never above 165</td></tr>
+            <tr><td>VO2max</td><td>Week 1 = current 5K effort (your baseline), then 3 s/km faster per week</td></tr>
+            <tr><td>Goal pace</td><td><span class="mono">18:30 = 3:42/km</span> (1110 s ÷ 5)</td></tr>
+          </tbody>
+        </table>
+        <ul>
+          <li>Only take the next 3 s/km if last week's final rep matched your first and felt controlled. Otherwise repeat last week's pace.</li>
+          <li>Your week-5 average rep pace is your test pace: <span class="mono">3:42/km = 18:30</span>, <span class="mono">3:48/km = 19:00</span>, <span class="mono">3:50/km = 19:10</span>.</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <h2>Session notes</h2>
+        <ul>
+          <li><b>WU</b> = 15 min easy + 4 strides. <b>CD</b> = 10 min easy.</li>
+          <li><b>Strides:</b> 20 s building to about mile-race speed, relaxed, never a sprint. Walk back.</li>
+          <li><b>Hill sprints:</b> moderately steep hill, 10 s hard but smooth, walk down. Full recovery, about 90 s or more.</li>
+          <li><b>1 km reps:</b> if a rep is more than 5 s/km slower than target, finish it and end the session.</li>
+          <li><b>Test:</b> first km no faster than test pace, hold through 4 km, race the last km.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- DASHBOARD -->
+  <section id="view-dashboard" role="tabpanel" aria-labelledby="tab-dashboard" hidden style="gap:20px">
+    <div class="kpis">
+      <div class="kpi"><span class="lbl">Completion</span><span class="kpi-val" id="k-comp">0%</span><span class="kpi-sub" id="k-comp-sub">—</span></div>
+      <div class="kpi"><span class="lbl">On schedule</span><span class="kpi-val" id="k-sched">—</span><span class="pill neutral" id="k-sched-pill">Not started</span><span class="kpi-sub" id="k-sched-sub">—</span></div>
+      <div class="kpi"><span class="lbl">Key sessions</span><span class="kpi-val" id="k-key">0%</span><span class="kpi-sub" id="k-key-sub">VO2max, LT2, hill sprints and the test</span></div>
+      <div class="kpi"><span class="lbl">Projected 5K</span><span class="kpi-val" id="k-proj">—</span><span class="kpi-sub" id="k-proj-sub">Log a Tuesday rep pace to see this</span></div>
+      <div class="kpi"><span class="lbl">Days to test</span><span class="kpi-val" id="k-days">—</span><span class="kpi-sub" id="k-days-sub">—</span></div>
+    </div>
+
+    <div class="dash-grid">
+      <div class="panel">
+        <div class="panel-head"><h2>Completion by week</h2><p class="panel-note">Sessions ticked ÷ sessions planned</p></div>
+        <div class="chart" id="ch-weeks"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>Completion by session type</h2><p class="panel-note">Whole block</p></div>
+        <div class="types" id="types"></div>
+      </div>
+    </div>
+
+    <div class="dash-grid">
+      <div class="panel">
+        <div class="panel-head"><h2>VO2max pace</h2><p class="panel-note">Average 1 km rep pace, faster is higher</p></div>
+        <div class="legend" aria-hidden="true">
+          <span style="--c: var(--vo2)">Your average</span>
+          <span class="dash" style="--c: var(--muted)">Target (baseline −3 s/km per week)</span>
+          <span class="dash" style="--c: var(--good)">Goal 3:42 = 18:30</span>
+        </div>
+        <div class="chart" id="ch-vo2"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>Threshold pace</h2><p class="panel-note">Average pace on Thursday's LT2 reps at 158–165 bpm</p></div>
+        <div class="headline" id="lt2-head"></div>
+        <div class="chart" id="ch-lt2"></div>
+      </div>
+    </div>
+
+    <div class="dash-grid">
+      <div class="panel">
+        <div class="panel-head"><h2>Session log</h2><p class="panel-note">Type paces as m:ss per km, e.g. 3:55</p></div>
+        <div class="log-wrap">
+          <table class="simple log">
+            <thead><tr><th>Week</th><th>Tue avg rep pace</th><th>Tue target</th><th>Thu avg pace</th><th>Thu avg HR</th></tr></thead>
+            <tbody id="log-body"></tbody>
+          </table>
+        </div>
+        <p class="panel-note" id="log-msg" aria-live="polite"></p>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>5K test</h2><p class="panel-note" id="test-when">—</p></div>
+        <div class="test-row">
+          <label class="field log" for="test-time"><span class="lbl">Finish time (mm:ss)</span><input type="text" id="test-time" inputmode="numeric" placeholder="18:30" autocomplete="off"></label>
+          <div class="headline" id="test-head"></div>
+        </div>
+        <h2 style="margin-top:8px">Missed sessions</h2>
+        <div id="missed"></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  var COLORS = { easy: "var(--easy)", vo2: "var(--vo2)", lt2: "var(--lt2)", speed: "var(--speed)", long: "var(--long)", rest: "var(--rest)", test: "var(--vo2)" };
+  var TYPE_NAMES = { easy: "Easy", vo2: "VO2max", lt2: "LT2", speed: "Hills", long: "Long run", test: "5K test" };
+  var KEY_TYPES = { vo2: 1, lt2: 1, speed: 1, test: 1 };
+  var LOCAL_KEY = "5k-block-tracker-v1";
+  var GOAL_PACE = 222; // 18:30 = 1110 s / 5 km
+
+  function buildPlan() {
+    var easy = [30, 35, 40, 40, 40], reps = [4, 5, 6, 6, 6], lt = [2, 3, 3, 3, 3];
+    var sprints = [6, 8, 8, 10, 10], longMin = [60, 65, 70, 75, 80];
+    var weeks = [];
+    for (var w = 0; w < 5; w++) {
+      var pace = w === 0 ? "current 5K effort, even splits (average = your baseline)" : "baseline −" + (w * 3) + " s/km";
+      var tueDesc = "WU · " + reps[w] + "×1km at " + pace + " · 3 min jog between · CD" + (w === 4 ? ". Average = your test pace" : "");
+      weeks.push({ tag: w < 2 ? "Ramp-in" : "Build", days: [
+        { t: "easy", title: "Easy + strides", desc: easy[w] + " min easy, then 6×20s strides" },
+        { t: "vo2", title: "VO2max " + reps[w] + "×1km", desc: tueDesc },
+        { t: "easy", title: "Easy", desc: easy[w] + " min easy" },
+        { t: "lt2", title: "LT2 " + lt[w] + "×10 min", desc: "15 min easy · " + lt[w] + "×10 min at HR 158–165 · 1 min jog between · CD" },
+        w < 2 ? { t: "rest", title: "Rest", desc: "", rest: true } : { t: "easy", title: "Rest or easy", desc: "Rest, or 30 min easy" },
+        { t: "speed", title: "Easy + hill sprints", desc: "30 min easy, then " + sprints[w] + "×10s hill sprints, walk back down" },
+        { t: "long", title: "Long run", desc: longMin[w] + " min easy" }
+      ]});
+    }
+    weeks.push({ tag: "Test week", days: [
+      { t: "easy", title: "Easy + strides", desc: "30 min easy, then 6×20s strides" },
+      { t: "vo2", title: "Race pace 4×1km", desc: "WU · 4×1km at test pace · 3 min jog between · CD" },
+      { t: "easy", title: "Easy", desc: "30 min easy" },
+      { t: "lt2", title: "LT2 1×10 min", desc: "15 min easy · 1×10 min at HR 158–165 · 4 strides · CD" },
+      { t: "easy", title: "Rest or shakeout", desc: "Rest, or 20 min easy + 3 strides" },
+      { t: "test", title: "5K test", desc: "15–20 min easy + 4 strides · 5K at test pace · 10–15 min easy" },
+      { t: "easy", title: "Easy", desc: "40 min easy" }
+    ]});
+    return weeks;
+  }
+  var PLAN = buildPlan();
+
+  var state = { start: "2026-10-12", done: {}, log: {}, test: "" };
+
+  // ---- helpers ----
+  function parseDate(s) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || ""); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; }
+  function addDays(d, n) { return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n); }
+  function firstMonday(d) { return addDays(d, (1 - d.getDay() + 7) % 7); }
+  function fmt(d) { return DAYS[(d.getDay() + 6) % 7] + " " + d.getDate() + " " + MONTHS[d.getMonth()]; }
+  function short(d) { return d.getDate() + " " + MONTHS[d.getMonth()]; }
+  function midnight(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+  function sameDay(a, b) { return a.getTime() === midnight(b).getTime(); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function parseMS(s) { var m = /^\s*(\d{1,2})[:.](\d{2})\s*$/.exec(s || ""); if (!m || +m[2] > 59) return null; return +m[1] * 60 + +m[2]; }
+  function fmtMS(sec) { sec = Math.round(sec); var m = Math.floor(sec / 60), s = sec % 60; return m + ":" + (s < 10 ? "0" : "") + s; }
+  function pct(a, b) { return b ? Math.round(a / b * 100) : 0; }
+  function weekMonday() { return firstMonday(parseDate(state.start) || new Date(2026, 9, 12)); }
+  function logOf(w) { return state.log["w" + w] || {}; }
+
+  function sessions() {
+    var mon = weekMonday(), out = [];
+    PLAN.forEach(function (wk, wi) {
+      wk.days.forEach(function (d, di) {
+        var key = "w" + (wi + 1) + "d" + di;
+        out.push({ w: wi + 1, di: di, key: key, date: addDays(mon, wi * 7 + di), t: d.t, title: d.title, rest: !!d.rest, done: !!state.done[key] });
+      });
+    });
+    return out;
+  }
+
+  // ---- program view ----
+  var bodyEl = document.getElementById("body");
+  var startEl = document.getElementById("start");
+  var scroller = document.getElementById("scroller");
+  var statusEl = document.getElementById("status");
+  var canWrite = true, didAutoScroll = false;
+
+  function renderProgram(list, today) {
+    var html = "";
+    PLAN.forEach(function (wk, wi) {
+      var wStart = list[wi * 7].date;
+      html += '<tr><th scope="row"><span class="wk-n">' + (wi + 1) + '</span><span class="wk-tag">' + esc(wk.tag) + '</span><span class="wk-tag">' + short(wStart) + '</span></th>';
+      wk.days.forEach(function (d, di) {
+        var s = list[wi * 7 + di], cls = [];
+        if (d.rest) cls.push("rest");
+        if (d.t === "test") cls.push("test");
+        if (s.done && !d.rest) cls.push("is-done");
+        if (sameDay(today, s.date)) cls.push("is-today");
+        var id = "c-" + s.key;
+        html += '<td class="' + cls.join(" ") + '">';
+        if (d.rest) {
+          html += '<div class="cell static" style="--c:' + COLORS.rest + '"><div class="cell-head"><span class="date">' + fmt(s.date) + '</span></div><div class="title">Rest</div></div>';
+        } else {
+          html += '<label class="cell" for="' + id + '" style="--c:' + COLORS[d.t] + '">' +
+            '<span class="cell-head"><span class="date">' + fmt(s.date) + '</span>' +
+            '<input type="checkbox" id="' + id + '" data-key="' + s.key + '"' + (s.done ? " checked" : "") + (canWrite ? "" : " disabled") + ' aria-label="' + esc(fmt(s.date) + ": " + d.title + " done") + '"></span>' +
+            '<span class="title">' + esc(d.title) + '</span>' +
+            '<span class="desc">' + esc(d.desc) + '</span></label>';
+        }
+        html += "</td>";
+      });
+      html += "</tr>";
+    });
+    bodyEl.innerHTML = html;
+    if (!didAutoScroll && !document.getElementById("view-program").hidden) {
+      var t = bodyEl.querySelector("td.is-today");
+      if (t) { didAutoScroll = true; var target = t.offsetLeft - 82; if (target > 0 && scroller.scrollWidth > scroller.clientWidth) scroller.scrollLeft = target; }
+    }
+  }
+
+  // ---- charts ----
+  function chartWidth(el) { return Math.max(280, Math.min(720, el.clientWidth || 480)); }
+
+  function barChart(el, rows, currentIdx) {
+    var W = chartWidth(el), H = 210, m = { t: 22, r: 8, b: 40, l: 36 };
+    var iw = W - m.l - m.r, ih = H - m.t - m.b, n = rows.length, band = iw / n, bw = Math.min(44, band * 0.56);
+    var y = function (v) { return m.t + ih - v / 100 * ih; };
+    var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Completion by week">';
+    [0, 50, 100].forEach(function (g) {
+      s += '<line x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + y(g) + '" y2="' + y(g) + '" stroke="var(--grid)" stroke-width="1"/>';
+      s += '<text x="' + (m.l - 6) + '" y="' + (y(g) + 4) + '" text-anchor="end">' + g + '%</text>';
+    });
+    rows.forEach(function (r, i) {
+      var cx = m.l + band * i + band / 2, h = Math.max(0, ih * r.p / 100), x = cx - bw / 2, top = m.t + ih - h;
+      var tip = "Week " + (i + 1) + ": " + r.done + " of " + r.total + " sessions (" + r.p + "%)";
+      if (h > 0) {
+        var rad = Math.min(4, h);
+        s += '<path d="M' + x + ',' + (m.t + ih) + 'V' + (top + rad) + 'Q' + x + ',' + top + ' ' + (x + rad) + ',' + top + 'H' + (x + bw - rad) + 'Q' + (x + bw) + ',' + top + ' ' + (x + bw) + ',' + (top + rad) + 'V' + (m.t + ih) + 'Z" fill="var(--accent)"' + (i === currentIdx ? '' : ' opacity="0.85"') + '/>';
+      }
+      s += '<text class="val" x="' + cx + '" y="' + (top - 6) + '" text-anchor="middle">' + r.p + '%</text>';
+      s += '<text x="' + cx + '" y="' + (H - m.b + 16) + '" text-anchor="middle"' + (i === currentIdx ? ' class="val"' : '') + '>W' + (i + 1) + '</text>';
+      if (i === currentIdx) s += '<text x="' + cx + '" y="' + (H - m.b + 30) + '" text-anchor="middle">now</text>';
+      s += '<rect x="' + (cx - band / 2) + '" y="' + m.t + '" width="' + band + '" height="' + ih + '" fill="transparent" data-tip="' + esc(tip) + '"/>';
+    });
+    s += '<line x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + (m.t + ih) + '" y2="' + (m.t + ih) + '" stroke="var(--line)" stroke-width="1"/></svg>';
+    el.innerHTML = s;
+  }
+
+  // series: [{name, color, dash, points:[{x:week, v:sec}]}], ref: {v, label, color}
+  function paceChart(el, series, ref, emptyMsg, label) {
+    var hasData = series.some(function (se) { return se.points.length && !se.ghost; });
+    if (!hasData) { el.innerHTML = '<div class="empty">' + esc(emptyMsg) + '</div>'; return; }
+    var W = chartWidth(el), H = 230, m = { t: 16, r: 64, b: 30, l: 44 };
+    var iw = W - m.l - m.r, ih = H - m.t - m.b;
+    var vals = [];
+    series.forEach(function (se) { se.points.forEach(function (p) { vals.push(p.v); }); });
+    if (ref) vals.push(ref.v);
+    var lo = Math.min.apply(null, vals) - 4, hi = Math.max.apply(null, vals) + 4;
+    lo = Math.floor(lo / 5) * 5; hi = Math.ceil(hi / 5) * 5; if (hi - lo < 15) hi = lo + 15;
+    var x = function (w) { return m.l + (w - 1) / 5 * iw; };
+    var y = function (v) { return m.t + (v - lo) / (hi - lo) * ih; }; // faster (lower sec) is higher on the chart
+    var step = (hi - lo) > 40 ? 10 : 5;
+    var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(label) + '">';
+    for (var g = lo; g <= hi; g += step) {
+      s += '<line x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + y(g) + '" y2="' + y(g) + '" stroke="var(--grid)" stroke-width="1"/>';
+      s += '<text x="' + (m.l - 6) + '" y="' + (y(g) + 4) + '" text-anchor="end">' + fmtMS(g) + '</text>';
+    }
+    for (var w = 1; w <= 6; w++) s += '<text x="' + x(w) + '" y="' + (H - 8) + '" text-anchor="middle">W' + w + '</text>';
+    if (ref) {
+      s += '<line x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + y(ref.v) + '" y2="' + y(ref.v) + '" stroke="' + ref.color + '" stroke-width="1.5" stroke-dasharray="5 4"/>';
+      s += '<text x="' + (W - m.r + 6) + '" y="' + (y(ref.v) + 4) + '" style="fill:' + ref.color + '">' + esc(ref.label) + '</text>';
+    }
+    series.forEach(function (se) {
+      if (!se.points.length) return;
+      var d = se.points.map(function (p, i) { return (i ? "L" : "M") + x(p.x) + "," + y(p.v); }).join("");
+      s += '<path d="' + d + '" fill="none" stroke="' + se.color + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"' + (se.dash ? ' stroke-dasharray="5 4"' : '') + '/>';
+      se.points.forEach(function (p) {
+        if (!se.dash) s += '<circle cx="' + x(p.x) + '" cy="' + y(p.v) + '" r="4.5" fill="' + se.color + '" stroke="var(--surface)" stroke-width="2"/>';
+        s += '<circle cx="' + x(p.x) + '" cy="' + y(p.v) + '" r="14" fill="transparent" data-tip="' + esc("Week " + p.x + " · " + se.name + ": " + fmtMS(p.v) + "/km" + (p.extra || "")) + '"/>';
+      });
+      var last = se.points[se.points.length - 1];
+      if (!se.dash) s += '<text class="val" x="' + (x(last.x) + 9) + '" y="' + (y(last.v) - 8) + '">' + fmtMS(last.v) + '</text>';
+    });
+    s += '</svg>';
+    el.innerHTML = s;
+  }
+
+  // tooltip layer
+  document.querySelectorAll(".chart").forEach(function (box) {
+    var tip = document.createElement("div"); tip.className = "tip"; tip.hidden = true; box.appendChild(tip);
+    function show(e) {
+      var t = e.target.closest && e.target.closest("[data-tip]");
+      if (!t || !box.contains(t)) { tip.hidden = true; return; }
+      var r = box.getBoundingClientRect(), br = t.getBoundingClientRect();
+      tip.textContent = t.getAttribute("data-tip");
+      tip.style.left = Math.min(Math.max(br.left + br.width / 2 - r.left, 60), r.width - 60) + "px";
+      tip.style.top = (e.type === "pointermove" && t.tagName === "rect" ? (e.clientY - r.top) : (br.top + br.height / 2 - r.top)) + "px";
+      tip.hidden = false;
+    }
+    box.addEventListener("pointermove", show);
+    box.addEventListener("pointerdown", show);
+    box.addEventListener("pointerleave", function () { tip.hidden = true; });
+  });
+
+  // ---- dashboard ----
+  var logBody = document.getElementById("log-body");
+  (function buildLog() {
+    var html = "";
+    for (var w = 1; w <= 6; w++) {
+      html += '<tr><td><b>W' + w + '</b></td>' +
+        '<td><input type="text" inputmode="numeric" id="lg-vo2-' + w + '" data-w="' + w + '" data-f="vo2" placeholder="m:ss" autocomplete="off" aria-label="Week ' + w + ' Tuesday average rep pace"></td>' +
+        '<td class="muted mono" id="lg-tgt-' + w + '">—</td>' +
+        '<td><input type="text" inputmode="numeric" id="lg-lt2p-' + w + '" data-w="' + w + '" data-f="lt2p" placeholder="m:ss" autocomplete="off" aria-label="Week ' + w + ' Thursday average pace"></td>' +
+        '<td><input type="text" inputmode="numeric" class="hr" id="lg-lt2hr-' + w + '" data-w="' + w + '" data-f="lt2hr" placeholder="bpm" autocomplete="off" aria-label="Week ' + w + ' Thursday average heart rate"><span class="flag" id="lg-flag-' + w + '" hidden>over 165</span></td></tr>';
+    }
+    logBody.innerHTML = html;
+  })();
+
+  function targetFor(w) {
+    var base = parseMS(logOf(1).vo2);
+    if (w === 1) return null;
+    if (w <= 5) return base == null ? null : base - 3 * (w - 1);
+    var p5 = parseMS(logOf(5).vo2);
+    return p5 != null ? p5 : (base == null ? null : base - 12);
+  }
+
+  function syncInputs() {
+    for (var w = 1; w <= 6; w++) {
+      ["vo2", "lt2p", "lt2hr"].forEach(function (f) {
+        var el = document.getElementById("lg-" + f + "-" + w);
+        if (document.activeElement !== el) el.value = logOf(w)[f] || "";
+      });
+      var t = targetFor(w);
+      document.getElementById("lg-tgt-" + w).textContent = w === 1 ? "sets baseline" : (t == null ? "—" : fmtMS(t));
+      var hr = parseInt(logOf(w).lt2hr, 10);
+      document.getElementById("lg-flag-" + w).hidden = !(hr > 165);
+    }
+    var te = document.getElementById("test-time");
+    if (document.activeElement !== te) te.value = state.test || "";
+  }
+
+  function setPill(el, cls, text) { el.className = "pill " + cls; el.textContent = text; }
+
+  function renderDash(list, today) {
+    var planned = list.filter(function (s) { return !s.rest; });
+    var done = planned.filter(function (s) { return s.done; });
+    var t0 = midnight(today);
+    var due = planned.filter(function (s) { return s.date < t0 || (sameDay(today, s.date) && s.done); });
+    var dueDone = due.filter(function (s) { return s.done; });
+    var key = planned.filter(function (s) { return KEY_TYPES[s.t]; });
+    var keyDone = key.filter(function (s) { return s.done; });
+
+    document.getElementById("k-comp").innerHTML = pct(done.length, planned.length) + "%";
+    document.getElementById("k-comp-sub").textContent = done.length + " of " + planned.length + " sessions done";
+
+    var sp = document.getElementById("k-sched-pill");
+    if (!due.length) {
+      document.getElementById("k-sched").textContent = "—";
+      setPill(sp, "neutral", "Not started");
+      document.getElementById("k-sched-sub").textContent = "Week 1 starts " + fmt(list[0].date);
+    } else {
+      var a = pct(dueDone.length, due.length);
+      document.getElementById("k-sched").textContent = a + "%";
+      if (a >= 90) setPill(sp, "good", "On track"); else if (a >= 70) setPill(sp, "warn", "Slipping"); else setPill(sp, "bad", "Behind");
+      document.getElementById("k-sched-sub").textContent = dueDone.length + " of " + due.length + " sessions due so far";
+    }
+    document.getElementById("k-key").textContent = pct(keyDone.length, key.length) + "%";
+    document.getElementById("k-key-sub").textContent = keyDone.length + " of " + key.length + " VO2max, LT2, hill and test sessions";
+
+    // projection from latest Tuesday pace (weeks 1–5)
+    var latestW = 0, latestP = null;
+    for (var w = 1; w <= 5; w++) { var p = parseMS(logOf(w).vo2); if (p != null) { latestW = w; latestP = p; } }
+    if (latestP != null) {
+      document.getElementById("k-proj").textContent = fmtMS(latestP * 5);
+      var diff = latestP * 5 - GOAL_PACE * 5;
+      document.getElementById("k-proj-sub").textContent = "W" + latestW + " reps " + fmtMS(latestP) + "/km × 5 · " + (diff <= 0 ? "on 18:30 pace" : fmtMS(diff) + " off 18:30");
+    } else {
+      document.getElementById("k-proj").textContent = "—";
+      document.getElementById("k-proj-sub").textContent = "Log a Tuesday rep pace to see this";
+    }
+
+    var testDay = list[5 * 7 + 5].date;
+    var days = Math.round((testDay - t0) / 86400000);
+    document.getElementById("k-days").textContent = days >= 0 ? String(days) : "0";
+    document.getElementById("k-days-sub").textContent = days > 0 ? "Test on " + fmt(testDay) : (days === 0 ? "Test day today" : "Tested " + fmt(testDay));
+    document.getElementById("test-when").textContent = fmt(testDay);
+
+    // weekly
+    var curIdx = -1, rows = [];
+    for (var wi = 0; wi < 6; wi++) {
+      var wk = planned.filter(function (s) { return s.w === wi + 1; });
+      var wd = wk.filter(function (s) { return s.done; }).length;
+      rows.push({ done: wd, total: wk.length, p: pct(wd, wk.length) });
+      var ws = list[wi * 7].date, we = addDays(ws, 7);
+      if (t0 >= ws && t0 < we) curIdx = wi;
+    }
+    barChart(document.getElementById("ch-weeks"), rows, curIdx);
+
+    // by type
+    var order = ["easy", "vo2", "lt2", "speed", "long", "test"], thtml = "";
+    order.forEach(function (t) {
+      var all = planned.filter(function (s) { return s.t === t; }), dn = all.filter(function (s) { return s.done; }).length;
+      var c = t === "test" ? "var(--vo2)" : COLORS[t];
+      thtml += '<div class="type-row" style="--c:' + c + '"><span class="type-name">' + TYPE_NAMES[t] + '</span><span class="type-track"><i style="width:' + pct(dn, all.length) + '%"></i></span><span class="type-num">' + dn + '/' + all.length + ' · ' + pct(dn, all.length) + '%</span></div>';
+    });
+    document.getElementById("types").innerHTML = thtml;
+
+    // VO2 chart
+    var actual = [], target = [];
+    for (w = 1; w <= 6; w++) {
+      var av = parseMS(logOf(w).vo2); if (av != null) actual.push({ x: w, v: av, extra: " · 5K equivalent " + fmtMS(av * 5) });
+      var tv = w === 1 ? parseMS(logOf(1).vo2) : targetFor(w); if (tv != null) target.push({ x: w, v: tv });
+    }
+    paceChart(document.getElementById("ch-vo2"), [
+      { name: "Target", color: "var(--muted)", dash: true, points: target, ghost: true },
+      { name: "Your average", color: "var(--vo2)", points: actual }
+    ], { v: GOAL_PACE, label: "Goal 3:42", color: "var(--good)" }, "Log Tuesday's average rep pace in the session log to see your trend.", "VO2max average rep pace by week");
+
+    // LT2
+    var lt = [];
+    for (w = 1; w <= 6; w++) {
+      var lp = parseMS(logOf(w).lt2p); var hr = parseInt(logOf(w).lt2hr, 10);
+      if (lp != null) lt.push({ x: w, v: lp, extra: isNaN(hr) ? "" : " · " + hr + " bpm" });
+    }
+    paceChart(document.getElementById("ch-lt2"), [{ name: "LT2 pace", color: "var(--lt2)", points: lt }], null, "Log Thursday's average pace to see your threshold trend.", "Threshold pace by week");
+    var lh = "";
+    if (lt.length) {
+      lh += '<div><span class="lbl">Latest</span><b>' + fmtMS(lt[lt.length - 1].v) + '/km</b></div>';
+      if (lt.length > 1) {
+        var ch = lt[lt.length - 1].v - lt[0].v;
+        lh += '<div><span class="lbl">Change since W' + lt[0].x + '</span><b>' + (ch < 0 ? "−" + Math.abs(ch) : (ch > 0 ? "+" + ch : "0")) + ' s/km</b></div>';
+      }
+    }
+    document.getElementById("lt2-head").innerHTML = lh;
+
+    // test
+    var tt = parseMS(state.test), th = "";
+    if (tt != null) {
+      var d18 = tt - GOAL_PACE * 5;
+      th += '<div><span class="lbl">Pace</span><b>' + fmtMS(tt / 5) + '/km</b></div>';
+      th += '<div><span class="lbl">vs 18:30</span><b>' + (d18 <= 0 ? "−" + fmtMS(-d18) : "+" + fmtMS(d18)) + '</b></div>';
+      if (latestP != null) { var dp = tt - latestP * 5; th += '<div><span class="lbl">vs projection</span><b>' + (dp <= 0 ? "−" + fmtMS(-dp) : "+" + fmtMS(dp)) + '</b></div>'; }
+    }
+    document.getElementById("test-head").innerHTML = th;
+
+    // missed
+    var missed = planned.filter(function (s) { return s.date < t0 && !s.done; });
+    var mh;
+    if (!due.length) mh = '<p class="panel-note">Nothing due yet.</p>';
+    else if (!missed.length) mh = '<p class="panel-note">None. Every session due so far is ticked.</p>';
+    else mh = '<ul class="missed">' + missed.map(function (s) { return '<li><span class="mono">' + fmt(s.date) + '</span>' + esc(s.title) + (KEY_TYPES[s.t] ? ' <span class="flag" style="color:var(--warn)">key</span>' : '') + '</li>'; }).join("") + '</ul>';
+    document.getElementById("missed").innerHTML = mh;
+
+    syncInputs();
+  }
+
+  function render() {
+    var list = sessions(), today = new Date();
+    if (startEl.value !== state.start) startEl.value = state.start;
+    document.getElementById("wk1").textContent = fmt(list[0].date);
+    document.getElementById("testDate").textContent = fmt(list[40].date);
+    var planned = list.filter(function (s) { return !s.rest; }), dn = planned.filter(function (s) { return s.done; }).length;
+    document.getElementById("progTxt").textContent = dn + " / " + planned.length;
+    document.getElementById("progBar").style.width = pct(dn, planned.length) + "%";
+    renderProgram(list, today);
+    renderDash(list, today);
+  }
+
+  // ---- tabs ----
+  var tabs = { program: document.getElementById("tab-program"), dashboard: document.getElementById("tab-dashboard") };
+  function showTab(name) {
+    Object.keys(tabs).forEach(function (k) {
+      var on = k === name;
+      tabs[k].setAttribute("aria-selected", on ? "true" : "false");
+      var v = document.getElementById("view-" + k);
+      v.hidden = !on;
+      if (on) v.style.display = "grid";
+    });
+    try { localStorage.setItem(LOCAL_KEY + "-tab", name); } catch (e) {}
+    render();
+  }
+  tabs.program.addEventListener("click", function () { showTab("program"); });
+  tabs.dashboard.addEventListener("click", function () { showTab("dashboard"); });
+
+  // ---- persistence ----
+  var ref = null, mode = "pending", writeChain = Promise.resolve(), pendingWrites = 0, saveTimer = null, saveQueued = false;
+  function setStatus(msg) { statusEl.textContent = msg; }
+  function snapshotState() { return { start: state.start, done: Object.assign({}, state.done), log: JSON.parse(JSON.stringify(state.log)), test: state.test || "" }; }
+  function applyData(d) {
+    if (!d || typeof d !== "object") return;
+    if (typeof d.start === "string") state.start = d.start;
+    state.done = Object.assign({}, d.done || {});
+    state.log = d.log && typeof d.log === "object" ? JSON.parse(JSON.stringify(d.log)) : {};
+    state.test = typeof d.test === "string" ? d.test : "";
+  }
+  function loadLocal() { try { var raw = localStorage.getItem(LOCAL_KEY); if (raw) applyData(JSON.parse(raw)); } catch (e) {} }
+  function saveLocal() { try { localStorage.setItem(LOCAL_KEY, JSON.stringify(snapshotState())); } catch (e) {} }
+
+  function scheduleSave() {
+    if (mode === "local") { saveLocal(); setStatus("Saved in this browser only"); return; }
+    if (mode !== "db" || !ref) { saveLocal(); return; }
+    setStatus("Saving…");
+    saveQueued = true;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(function () {
+      saveQueued = false;
+      var body = snapshotState(); body.updated = new Date().toISOString();
+      pendingWrites++;
+      writeChain = writeChain.then(function () { return ref.set(body); }).then(function () {
+        pendingWrites--; if (!pendingWrites) setStatus("Saved");
+      }, function (e) {
+        pendingWrites--;
+        if (e && e.code === "invalid_argument") { canWrite = false; setStatus("View only: you can't save changes here"); render(); }
+        else setStatus("Couldn't save. Check your connection and try again.");
+      });
+    }, 400);
+  }
+
+  bodyEl.addEventListener("change", function (e) {
+    var el = e.target;
+    if (!el || !el.dataset || !el.dataset.key) return;
+    if (el.checked) state.done[el.dataset.key] = true; else delete state.done[el.dataset.key];
+    render(); scheduleSave();
+  });
+  startEl.addEventListener("change", function () {
+    if (!parseDate(startEl.value)) return;
+    state.start = startEl.value; didAutoScroll = false;
+    render(); scheduleSave();
+  });
+  var logMsg = document.getElementById("log-msg");
+  logBody.addEventListener("change", function (e) {
+    var el = e.target; if (!el.dataset || !el.dataset.f) return;
+    var w = el.dataset.w, f = el.dataset.f, v = el.value.trim();
+    var ok = v === "" || (f === "lt2hr" ? /^\d{2,3}$/.test(v) && +v >= 80 && +v <= 220 : parseMS(v) != null);
+    el.setAttribute("aria-invalid", ok ? "false" : "true");
+    if (!ok) { logMsg.textContent = f === "lt2hr" ? "Heart rate should be a number like 162." : "Use m:ss for pace, for example 3:55."; return; }
+    logMsg.textContent = "";
+    if (f !== "lt2hr" && v) v = fmtMS(parseMS(v));
+    var entry = Object.assign({}, state.log["w" + w] || {});
+    if (v) entry[f] = v; else delete entry[f];
+    state.log["w" + w] = entry;
+    el.value = v;
+    render(); scheduleSave();
+  });
+  document.getElementById("test-time").addEventListener("change", function (e) {
+    var v = e.target.value.trim(), ok = v === "" || parseMS(v) != null;
+    e.target.setAttribute("aria-invalid", ok ? "false" : "true");
+    if (!ok) return;
+    state.test = v ? fmtMS(parseMS(v)) : ""; e.target.value = state.test;
+    render(); scheduleSave();
+  });
+
+  var resizeT;
+  window.addEventListener("resize", function () { clearTimeout(resizeT); resizeT = setTimeout(render, 150); });
+
+  // initial view
+  var initial = location.hash === "#dashboard" ? "dashboard" : "program";
+  if (location.hash !== "#dashboard") { try { if (localStorage.getItem(LOCAL_KEY + "-tab") === "dashboard") initial = "dashboard"; } catch (e) {} }
+  showTab(initial);
+
+  function goLocal() { mode = "local"; loadLocal(); render(); setStatus("Saved in this browser only"); }
+
+  if (!window.claude || typeof window.claude.use !== "function") { goLocal(); return; }
+  window.claude.use("db").then(function (db) {
+    if (!db) { goLocal(); return; }
+    try { ref = db.doc("tracker/state"); } catch (e) { goLocal(); return; }
+    mode = "db";
+    var first = true;
+    ref.onSnapshot(function (snap) {
+      if (!(pendingWrites > 0 || saveQueued) && snap.exists) { applyData(snap.data()); render(); }
+      if (first) { first = false; setStatus(snap.exists ? "Synced across your devices" : "Tick a session to start saving"); }
+    }, function () { setStatus("Lost the connection to saved progress. Reload to reconnect."); });
+  }, function () { goLocal(); });
+})();
+</script>
